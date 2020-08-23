@@ -2,6 +2,7 @@ package murraco.controller;
 
 import javax.servlet.http.HttpServletRequest;
 
+import murraco.dto.*;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -11,7 +12,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import io.swagger.annotations.Api;
@@ -20,8 +20,6 @@ import io.swagger.annotations.ApiParam;
 import io.swagger.annotations.ApiResponse;
 import io.swagger.annotations.ApiResponses;
 import io.swagger.annotations.Authorization;
-import murraco.dto.UserDataDTO;
-import murraco.dto.UserResponseDTO;
 import murraco.model.User;
 import murraco.service.UserService;
 
@@ -37,23 +35,21 @@ public class UserController {
   private ModelMapper modelMapper;
 
   @PostMapping("/signin")
-  @ApiOperation(value = "${UserController.signin}")
+  @ApiOperation(value = "${UserController.signin}", response = TokenDTO.class)
   @ApiResponses(value = {//
       @ApiResponse(code = 400, message = "Something went wrong"), //
       @ApiResponse(code = 422, message = "Invalid username/password supplied")})
-  public String login(//
-      @ApiParam("Username") @RequestParam String username, //
-      @ApiParam("Password") @RequestParam String password) {
-    return userService.signin(username, password);
+  public TokenDTO login(@ApiParam("Signin User") @RequestBody UserSignInDTO user) {
+    return userService.signin(user);
   }
 
   @PostMapping("/signup")
-  @ApiOperation(value = "${UserController.signup}")
+  @ApiOperation(value = "${UserController.signup}", response = TokenDTO.class)
   @ApiResponses(value = {//
       @ApiResponse(code = 400, message = "Something went wrong"), //
       @ApiResponse(code = 403, message = "Access denied"), //
       @ApiResponse(code = 422, message = "Username is already in use")})
-  public String signup(@ApiParam("Signup User") @RequestBody UserDataDTO user) {
+  public TokenDTO signup(@ApiParam("Signup User") @RequestBody UserSignUpDTO user) {
     return userService.signup(modelMapper.map(user, User.class));
   }
 
@@ -93,10 +89,11 @@ public class UserController {
     return modelMapper.map(userService.whoami(req), UserResponseDTO.class);
   }
 
-  @GetMapping("/refresh")
+  @PostMapping("/refresh")
+  @ApiOperation(value = "${UserController.refresh}", response = TokenDTO.class, authorizations = { @Authorization(value="apiKey") })
   @PreAuthorize("hasRole('ROLE_ADMIN') or hasRole('ROLE_CLIENT')")
-  public String refresh(HttpServletRequest req) {
-    return userService.refresh(req.getRemoteUser());
+  public TokenDTO refresh(@ApiParam("Refresh Token") @RequestBody RefreshTokenDTO refreshtoken) {
+    return userService.refresh(refreshtoken);
   }
 
 }

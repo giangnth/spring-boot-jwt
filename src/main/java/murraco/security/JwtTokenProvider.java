@@ -1,9 +1,6 @@
 package murraco.security;
 
-import java.util.Base64;
-import java.util.Date;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import javax.annotation.PostConstruct;
@@ -28,64 +25,84 @@ import murraco.model.Role;
 @Component
 public class JwtTokenProvider {
 
-  /**
-   * THIS IS NOT A SECURE PRACTICE! For simplicity, we are storing a static key here. Ideally, in a
-   * microservices environment, this key would be kept on a config-server.
-   */
-  @Value("${security.jwt.token.secret-key:secret-key}")
-  private String secretKey;
+    /**
+     * THIS IS NOT A SECURE PRACTICE! For simplicity, we are storing a static key here. Ideally, in a
+     * microservices environment, this key would be kept on a config-server.
+     */
+    @Value("${security.jwt.token.secret-key:secret-key}")
+    private String secretKey;
 
-  @Value("${security.jwt.token.expire-length:3600000}")
-  private long validityInMilliseconds = 3600000; // 1h
+    @Value("${security.jwt.token.expire-length:24}")
+    private int validityInHours;
 
-  @Autowired
-  private MyUserDetails myUserDetails;
+    @Value("${security.jwt.token.expire-length:7200}")
+    private int refreshValidityInHours;
 
-  @PostConstruct
-  protected void init() {
-    secretKey = Base64.getEncoder().encodeToString(secretKey.getBytes());
-  }
+    @Autowired
+    private MyUserDetails myUserDetails;
 
-  public String createToken(String username, List<Role> roles) {
-
-    Claims claims = Jwts.claims().setSubject(username);
-    claims.put("auth", roles.stream().map(s -> new SimpleGrantedAuthority(s.getAuthority())).filter(Objects::nonNull).collect(Collectors.toList()));
-
-    Date now = new Date();
-    Date validity = new Date(now.getTime() + validityInMilliseconds);
-
-    return Jwts.builder()//
-        .setClaims(claims)//
-        .setIssuedAt(now)//
-        .setExpiration(validity)//
-        .signWith(SignatureAlgorithm.HS256, secretKey)//
-        .compact();
-  }
-
-  public Authentication getAuthentication(String token) {
-    UserDetails userDetails = myUserDetails.loadUserByUsername(getUsername(token));
-    return new UsernamePasswordAuthenticationToken(userDetails, "", userDetails.getAuthorities());
-  }
-
-  public String getUsername(String token) {
-    return Jwts.parser().setSigningKey(secretKey).parseClaimsJws(token).getBody().getSubject();
-  }
-
-  public String resolveToken(HttpServletRequest req) {
-    String bearerToken = req.getHeader("Authorization");
-    if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
-      return bearerToken.substring(7);
+    @PostConstruct
+    protected void init() {
+        secretKey = Base64.getEncoder().encodeToString(secretKey.getBytes());
     }
-    return null;
-  }
 
-  public boolean validateToken(String token) {
-    try {
-      Jwts.parser().setSigningKey(secretKey).parseClaimsJws(token);
-      return true;
-    } catch (JwtException | IllegalArgumentException e) {
-      throw new CustomException("Expired or invalid JWT token", HttpStatus.INTERNAL_SERVER_ERROR);
+    public String createToken(String username, List<Role> roles) {
+        Claims claimsAccessToken = Jwts.claims().setSubject(username);
+        claimsAccessToken.put("auth", roles.stream().map(s -> new SimpleGrantedAuthority(s.getAuthority())).filter(Objects::nonNull).collect(Collectors.toList()));
+
+        Calendar cal = Calendar.getInstance();
+        Date now = cal.getTime();
+        cal.setTime(new Date());
+        cal.add(Calendar.HOUR_OF_DAY, validityInHours);
+
+        return Jwts.builder()//
+                .setClaims(claimsAccessToken)//
+                .setIssuedAt(now)//
+                .setExpiration(cal.getTime())//
+                .signWith(SignatureAlgorithm.HS256, secretKey)//
+                .compact();
     }
-  }
+
+    public String createRefresh(String username, List<Role> roles) {
+        Claims claimsRefreshToken = Jwts.claims().setSubject(username);
+        claimsRefreshToken.put("auth", roles.stream().map(s -> new SimpleGrantedAuthority(s.getAuthority())).filter(Objects::nonNull).collect(Collectors.toList()));
+        Calendar cal = Calendar.getInstance();
+        Date now = cal.getTime();
+        cal.setTime(new Date());
+        cal.add(Calendar.HOUR_OF_DAY, refreshValidityInHours);
+
+        return Jwts.builder()
+                .setClaims(claimsRefreshToken)
+                .setIssuedAt(now)
+                .setExpiration(cal.getTime())
+                .signWith(SignatureAlgorithm.HS256, secretKey)//
+                .compact();
+    }
+
+    public Authentication getAuthentication(String token) {
+        UserDetails userDetails = myUserDetails.loadUserByUsername(getUsername(token));
+        return new UsernamePasswordAuthenticationToken(userDetails, "", userDetails.getAuthorities());
+    }
+
+    public String getUsername(String token) {
+        return Jwts.parser().setSigningKey(secretKey).parseClaimsJws(token).getBody().getSubject();
+    }
+
+    public String resolveTokenInHeader(HttpServletRequest req) {
+        String bearerToken = req.getHeader("Authorization");
+        if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
+            return bearerToken.substring(7);
+        }
+        return null;
+    }
+
+    public boolean validateToken(String token) {
+        try {
+            Jwts.parser().setSigningKey(secretKey).parseClaimsJws(token);
+            return true;
+        } catch (JwtException | IllegalArgumentException e) {
+            throw new CustomException("Expired or invalid JWT token", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
 
 }

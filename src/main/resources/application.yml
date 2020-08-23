@@ -27,7 +27,8 @@ security:
   jwt:
     token:
       secret-key: secret-key
-      expire-length: 300000 # 5 minutes duration by default: 5 minutes * 60 seconds * 1000 miliseconds
+      expire-length: 24 # 1 day
+      refresh-expire-length: 7200 # 30 days
       
 UserController:
   signin: Authenticates user and returns its JWT token.
@@ -35,3 +36,4 @@ UserController:
   delete: Deletes specific user by username
   search: Returns specific user by username
   me: Returns current user's data
+  refresh: Refresh token
